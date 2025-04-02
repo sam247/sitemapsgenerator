@@ -89,8 +89,9 @@ app.get('/auth/callback', async (req, res) => {
         // Store the credentials
         shopCredentials.set(shop, { accessToken: access_token });
         
-        // Generate initial sitemap
-        await generateSitemap(shop, access_token);
+        // Generate initial sitemaps
+        await generateSitemap(shop, access_token, 'xml');
+        await generateSitemap(shop, access_token, 'html');
         
         // Redirect to app
         res.redirect(`https://${shop}/admin/apps/${SHOPIFY_API_KEY}`);
@@ -100,8 +101,68 @@ app.get('/auth/callback', async (req, res) => {
     }
 });
 
+// Generate HTML sitemap
+async function generateHtmlSitemap(shop, products, collections, pages) {
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sitemap - ${shop}</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .section { margin: 20px 0; }
+        .section h2 { color: #666; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        ul { list-style: none; padding: 0; }
+        li { margin: 5px 0; }
+        a { color: #0066cc; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Sitemap for ${shop}</h1>
+    
+    <div class="section">
+        <h2>Homepage</h2>
+        <ul>
+            <li><a href="https://${shop}">Home</a></li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Products</h2>
+        <ul>
+            ${products.map(product => `
+                <li><a href="https://${shop}/products/${product.handle}">${product.title}</a></li>
+            `).join('')}
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Collections</h2>
+        <ul>
+            ${collections.map(collection => `
+                <li><a href="https://${shop}/collections/${collection.handle}">${collection.title}</a></li>
+            `).join('')}
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>Pages</h2>
+        <ul>
+            ${pages.map(page => `
+                <li><a href="https://${shop}/pages/${page.handle}">${page.title}</a></li>
+            `).join('')}
+        </ul>
+    </div>
+</body>
+</html>`;
+
+    return html;
+}
+
 // Sitemap generation function
-async function generateSitemap(shop, accessToken) {
+async function generateSitemap(shop, accessToken, type = 'xml') {
     const shopify = new Shopify({
         shopName: shop,
         accessToken: accessToken
@@ -115,46 +176,50 @@ async function generateSitemap(shop, accessToken) {
         // Fetch all pages
         const pages = await shopify.page.list();
 
-        // Generate XML sitemap
-        const sitemap = {
-            urlset: {
-                $: {
-                    xmlns: 'http://www.sitemaps.org/schemas/sitemap/0.9'
-                },
-                url: [
-                    // Homepage
-                    {
-                        loc: `https://${shop}`,
-                        changefreq: 'daily',
-                        priority: '1.0'
+        if (type === 'xml') {
+            // Generate XML sitemap
+            const sitemap = {
+                urlset: {
+                    $: {
+                        xmlns: 'http://www.sitemaps.org/schemas/sitemap/0.9'
                     },
-                    // Products
-                    ...products.map(product => ({
-                        loc: `https://${shop}/products/${product.handle}`,
-                        changefreq: 'daily',
-                        priority: '0.8'
-                    })),
-                    // Collections
-                    ...collections.map(collection => ({
-                        loc: `https://${shop}/collections/${collection.handle}`,
-                        changefreq: 'daily',
-                        priority: '0.7'
-                    })),
-                    // Pages
-                    ...pages.map(page => ({
-                        loc: `https://${shop}/pages/${page.handle}`,
-                        changefreq: 'weekly',
-                        priority: '0.5'
-                    }))
-                ]
-            }
-        };
+                    url: [
+                        // Homepage
+                        {
+                            loc: `https://${shop}`,
+                            changefreq: 'daily',
+                            priority: '1.0'
+                        },
+                        // Products
+                        ...products.map(product => ({
+                            loc: `https://${shop}/products/${product.handle}`,
+                            changefreq: 'daily',
+                            priority: '0.8'
+                        })),
+                        // Collections
+                        ...collections.map(collection => ({
+                            loc: `https://${shop}/collections/${collection.handle}`,
+                            changefreq: 'daily',
+                            priority: '0.7'
+                        })),
+                        // Pages
+                        ...pages.map(page => ({
+                            loc: `https://${shop}/pages/${page.handle}`,
+                            changefreq: 'weekly',
+                            priority: '0.5'
+                        }))
+                    ]
+                }
+            };
 
-        const builder = new Builder();
-        const xml = builder.buildObject(sitemap);
-
-        // Save sitemap
-        await fs.writeFile(path.join(__dirname, 'public', `${shop}-sitemap.xml`), xml);
+            const builder = new Builder();
+            const xml = builder.buildObject(sitemap);
+            await fs.writeFile(path.join(__dirname, 'public', `${shop}-sitemap.xml`), xml);
+        } else if (type === 'html') {
+            // Generate HTML sitemap
+            const html = await generateHtmlSitemap(shop, products, collections, pages);
+            await fs.writeFile(path.join(__dirname, 'public', `${shop}-sitemap.html`), html);
+        }
         
         return true;
     } catch (error) {
@@ -166,7 +231,8 @@ async function generateSitemap(shop, accessToken) {
 // Schedule periodic sitemap generation (every 6 hours)
 schedule.scheduleJob('0 */6 * * *', async () => {
     for (const [shop, credentials] of shopCredentials) {
-        await generateSitemap(shop, credentials.accessToken);
+        await generateSitemap(shop, credentials.accessToken, 'xml');
+        await generateSitemap(shop, credentials.accessToken, 'html');
     }
 });
 
@@ -174,12 +240,13 @@ schedule.scheduleJob('0 */6 * * *', async () => {
 app.post('/api/generate-sitemap', async (req, res) => {
     const shop = req.headers['x-shopify-shop-domain'];
     const credentials = shopCredentials.get(shop);
+    const { type = 'xml' } = req.body;
     
     if (!credentials) {
         return res.status(401).json({ error: 'Shop not authenticated' });
     }
 
-    const success = await generateSitemap(shop, credentials.accessToken);
+    const success = await generateSitemap(shop, credentials.accessToken, type);
     res.json({ success });
 });
 
