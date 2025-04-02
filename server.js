@@ -45,6 +45,26 @@ const verifyShopifyWebhook = (req, res, next) => {
     }
 };
 
+// Handle initial app load
+app.get('/', (req, res) => {
+    const { shop, hmac, host, timestamp } = req.query;
+    
+    if (!shop) {
+        return res.status(400).send('Missing shop parameter');
+    }
+
+    // Check if shop is already authenticated
+    const credentials = shopCredentials.get(shop);
+    if (credentials) {
+        // Shop is already authenticated, serve the app
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+        return;
+    }
+
+    // Shop needs authentication, redirect to install
+    res.redirect(`/install?shop=${shop}`);
+});
+
 // Install app route
 app.get('/install', (req, res) => {
     const shop = req.query.shop;
