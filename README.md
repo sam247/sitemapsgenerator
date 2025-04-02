@@ -1,1 +1,1 @@
-# sitemaps
+# sitemapsgenerator
