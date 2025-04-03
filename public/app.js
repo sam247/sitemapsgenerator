@@ -20,6 +20,16 @@ function App() {
             return;
         }
 
+        // Initialize App Bridge
+        const app = window.appBridge.createApp({
+            apiKey: 'b80607d72a775c29be0b8bf599cb6a90',
+            host: host,
+            forceRedirect: true
+        });
+
+        // Set the app instance in window for the Provider
+        window.app = app;
+
         setAppInitialized(true);
         setLoading(false);
     }, []);

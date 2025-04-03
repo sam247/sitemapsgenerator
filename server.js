@@ -45,8 +45,8 @@ const verifyShopifyWebhook = (req, res, next) => {
     }
 };
 
-// Handle initial app load
-app.get('/', (req, res) => {
+// Handle app installation
+app.get('/app', (req, res) => {
     const { shop, hmac, host, timestamp } = req.query;
     
     if (!shop) {
@@ -62,21 +62,21 @@ app.get('/', (req, res) => {
     }
 
     // Shop needs authentication, redirect to install
-    res.redirect(`/install?shop=${shop}`);
+    const state = crypto.randomBytes(16).toString('hex');
+    const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SCOPES}&redirect_uri=${HOST}/auth/callback&state=${state}`;
+    res.redirect(installUrl);
 });
 
-// Install app route
-app.get('/install', (req, res) => {
-    const shop = req.query.shop;
+// Update root route to redirect to app installation
+app.get('/', (req, res) => {
+    const { shop, hmac, host, timestamp } = req.query;
+    
     if (!shop) {
         return res.status(400).send('Missing shop parameter');
     }
-    
-    const state = crypto.randomBytes(16).toString('hex');
-    
-    const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SCOPES}&redirect_uri=${HOST}/auth/callback&state=${state}`;
-    
-    res.redirect(installUrl);
+
+    // Redirect to app installation
+    res.redirect(`/app?shop=${shop}&hmac=${hmac}&host=${host}&timestamp=${timestamp}`);
 });
 
 // OAuth callback route
