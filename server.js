@@ -6,6 +6,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
 const bodyParser = require('body-parser');
+const fetch = require('isomorphic-fetch');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -15,6 +16,9 @@ const SHOPIFY_API_KEY = 'b80607d72a775c29be0b8bf599cb6a90';
 const SHOPIFY_API_SECRET = '188bf34356899c3c66ab635b3ef31b9e';
 const SCOPES = 'read_products,read_collections,read_content';
 const HOST = process.env.HOST || 'https://sitemapsgenerator.onrender.com';
+
+// Store state for OAuth
+const stateStore = new Map();
 
 // Middleware
 app.use(bodyParser.json({ verify: (req, res, buf) => { req.rawBody = buf } }));
@@ -65,6 +69,8 @@ app.get('/app', (req, res) => {
 
     // Shop needs authentication, redirect to install
     const state = crypto.randomBytes(16).toString('hex');
+    stateStore.set(shop, state);
+    
     const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SCOPES}&redirect_uri=${HOST}/auth/callback&state=${state}`;
     res.redirect(installUrl);
 });
@@ -96,9 +102,16 @@ app.get('/', (req, res) => {
 app.get('/auth/callback', async (req, res) => {
     const { code, shop, state } = req.query;
     
-    if (!code || !shop) {
+    if (!code || !shop || !state) {
         return res.status(400).send('Missing required parameters');
     }
+
+    // Verify state
+    const storedState = stateStore.get(shop);
+    if (storedState !== state) {
+        return res.status(401).send('Invalid state parameter');
+    }
+    stateStore.delete(shop);
     
     try {
         const accessTokenResponse = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -126,8 +139,9 @@ app.get('/auth/callback', async (req, res) => {
         await generateSitemap(shop, access_token, 'xml');
         await generateSitemap(shop, access_token, 'html');
         
-        // Redirect to app
-        res.redirect(`https://${shop}/admin/apps/${SHOPIFY_API_KEY}`);
+        // Redirect to app with proper parameters
+        const redirectUrl = `https://${shop}/admin/apps/${SHOPIFY_API_KEY}`;
+        res.redirect(redirectUrl);
     } catch (error) {
         console.error('Error during OAuth:', error);
         res.status(500).send('Error during authentication. Please try again.');
