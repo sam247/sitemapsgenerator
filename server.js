@@ -5,6 +5,7 @@ const { Builder } = require('xml2js');
 const path = require('path');
 const fs = require('fs').promises;
 const crypto = require('crypto');
+const bodyParser = require('body-parser');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ const SCOPES = 'read_products,read_collections,read_content';
 const HOST = process.env.HOST || 'https://sitemapsgenerator.onrender.com';
 
 // Middleware
+app.use(bodyParser.json({ verify: (req, res, buf) => { req.rawBody = buf } }));
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -73,6 +75,17 @@ app.get('/', (req, res) => {
     
     if (!shop) {
         return res.status(400).send('Missing shop parameter');
+    }
+
+    // Verify HMAC
+    const message = `shop=${shop}&host=${host}&timestamp=${timestamp}`;
+    const generatedHash = crypto
+        .createHmac('sha256', SHOPIFY_API_SECRET)
+        .update(message)
+        .digest('hex');
+
+    if (generatedHash !== hmac) {
+        return res.status(401).send('Invalid HMAC');
     }
 
     // Redirect to app installation
