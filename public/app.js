@@ -1,10 +1,28 @@
-const { AppProvider, Page, Card, Button, Banner, Stack, Select, Text } = window.Polaris;
+const { AppProvider, Page, Card, Button, Banner, Stack, Select, Text, Spinner } = window.Polaris;
+const { Provider } = window.appBridgeReact;
 
 function App() {
-    const [loading, setLoading] = React.useState(false);
+    const [loading, setLoading] = React.useState(true);
     const [message, setMessage] = React.useState('');
     const [error, setError] = React.useState('');
     const [sitemapType, setSitemapType] = React.useState('xml');
+    const [appInitialized, setAppInitialized] = React.useState(false);
+
+    React.useEffect(() => {
+        // Check if we have the required parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const shop = urlParams.get('shop');
+        const host = urlParams.get('host');
+
+        if (!shop || !host) {
+            setError('Missing required parameters. Please try installing the app again.');
+            setLoading(false);
+            return;
+        }
+
+        setAppInitialized(true);
+        setLoading(false);
+    }, []);
 
     const generateSitemap = async () => {
         setLoading(true);
@@ -36,51 +54,71 @@ function App() {
         }
     };
 
+    if (loading) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <Spinner size="large" />
+            </div>
+        );
+    }
+
+    if (!appInitialized) {
+        return (
+            <div style={{ padding: '20px' }}>
+                <Banner status="critical">
+                    {error || 'Unable to initialize the app. Please try installing again.'}
+                </Banner>
+            </div>
+        );
+    }
+
     return (
-        <AppProvider i18n={{}}>
-            <Page title="Sitemap Generator">
-                <Card sectioned>
-                    <Banner status="info">
-                        Your sitemaps will be automatically updated every 6 hours.
-                        The sitemaps are available at:
-                        <ul>
-                            <li>/sitemap.xml</li>
-                            <li>/sitemap.html</li>
-                        </ul>
-                    </Banner>
-                    <div style={{ marginTop: '20px' }}>
-                        <Stack vertical spacing="4">
-                            <Select
-                                label="Sitemap Type"
-                                options={[
-                                    {label: 'XML Sitemap', value: 'xml'},
-                                    {label: 'HTML Sitemap', value: 'html'}
-                                ]}
-                                value={sitemapType}
-                                onChange={setSitemapType}
-                            />
-                            <Button
-                                primary
-                                onClick={generateSitemap}
-                                loading={loading}
-                            >
-                                Generate {sitemapType.toUpperCase()} Sitemap Now
-                            </Button>
-                        </Stack>
-                    </div>
-                    {message && (
-                        <Banner status="success" style={{ marginTop: '20px' }}>
-                            {message}
+        <Provider config={window.app}>
+            <AppProvider i18n={{}}>
+                <Page title="Sitemap Generator">
+                    <Card sectioned>
+                        <Banner status="info">
+                            Your sitemaps will be automatically updated every 6 hours.
+                            The sitemaps are available at:
+                            <ul>
+                                <li>/sitemap.xml</li>
+                                <li>/sitemap.html</li>
+                            </ul>
                         </Banner>
-                    )}
-                    {error && (
-                        <Banner status="critical" style={{ marginTop: '20px' }}>
-                            {error}
-                        </Banner>
-                    )}
-                </Card>
-            </Page>
-        </AppProvider>
+                        <div style={{ marginTop: '20px' }}>
+                            <Stack vertical spacing="4">
+                                <Select
+                                    label="Sitemap Type"
+                                    options={[
+                                        {label: 'XML Sitemap', value: 'xml'},
+                                        {label: 'HTML Sitemap', value: 'html'}
+                                    ]}
+                                    value={sitemapType}
+                                    onChange={setSitemapType}
+                                />
+                                <Button
+                                    primary
+                                    onClick={generateSitemap}
+                                    loading={loading}
+                                >
+                                    Generate {sitemapType.toUpperCase()} Sitemap Now
+                                </Button>
+                            </Stack>
+                        </div>
+                        {message && (
+                            <Banner status="success" style={{ marginTop: '20px' }}>
+                                {message}
+                            </Banner>
+                        )}
+                        {error && (
+                            <Banner status="critical" style={{ marginTop: '20px' }}>
+                                {error}
+                            </Banner>
+                        )}
+                    </Card>
+                </Page>
+            </AppProvider>
+        </Provider>
     );
 }
 
